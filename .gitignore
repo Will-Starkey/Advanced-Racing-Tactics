@@ -1,0 +1,41 @@
+# ── Environment & Secrets ─────────────────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Polar data (user-specific, uploaded at runtime) ───────────────
+data/polars/
+data/*.csv
+
+# ── IDE & editor ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ── Claude Code ───────────────────────────────────────────────────
+.claude/
+
+# ── Logs & runtime ────────────────────────────────────────────────
+*.log
+*.pid

@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Advanced Tactics Display</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0d1117;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #map {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+        }
+
+        /* ── Instrument Panel ───────────────────────────────── */
+        .panel {
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 100;
+            padding: 14px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            width: 236px;
+        }
+
+        .card {
+            background: rgba(28, 30, 36, 0.88);
+            border-radius: 10px;
+            padding: 11px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.07);
+        }
+
+        .card-tws { padding: 14px 16px; }
+
+        .lbl {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .val {
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+
+        .val-tws { font-size: 26px; }
+
+        /* TWD / AWD split row */
+        .card-split {
+            display: flex;
+            gap: 1px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.07);
+        }
+
+        .split-col {
+            flex: 1;
+            background: rgba(28, 30, 36, 0.88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .split-col:first-child {
+            border-right: 1px solid rgba(255,255,255,0.07);
+        }
+
+        .split-col .val { font-size: 18px; }
+
+        /* LIFT / HEADER */
+        .card-shift {
+            border-radius: 10px;
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            transition: background 0.5s ease, border-color 0.5s ease;
+        }
+
+        .card-shift.lift {
+            background: rgba(0, 210, 100, 0.13);
+            border: 1px solid rgba(0, 210, 100, 0.30);
+        }
+
+        .card-shift.header {
+            background: rgba(255, 60, 60, 0.13);
+            border: 1px solid rgba(255, 60, 60, 0.30);
+        }
+
+        .card-shift.neutral {
+            background: rgba(28, 30, 36, 0.88);
+            border: 1px solid rgba(255,255,255,0.07);
+        }
+
+        .lbl-shift {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            transition: color 0.4s;
+        }
+
+        .lbl-shift.lift   { color: rgba(0, 230, 118, 0.85); }
+        .lbl-shift.header { color: rgba(255, 82, 82, 0.85); }
+        .lbl-shift.neutral{ color: rgba(255,255,255,0.5); }
+
+        .val-shift {
+            font-size: 24px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.4s;
+        }
+
+        .val-shift.lift   { color: #00e676; }
+        .val-shift.header { color: #ff5252; }
+        .val-shift.neutral{ color: #ffffff; }
+
+        /* ── Wind Direction Card (top right) ───────────────── */
+        .wind-card {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            z-index: 100;
+            background: rgba(230, 232, 238, 0.93);
+            border-radius: 12px;
+            padding: 10px 18px 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 3px 16px rgba(0,0,0,0.28);
+            min-width: 86px;
+        }
+
+        .wind-arrow-wrap {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.6s ease;
+        }
+
+        .wind-deg {
+            color: #c62828;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Mark buttons ───────────────────────────────────── */
+        .mark-btns {
+            position: absolute;
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+            white-space: nowrap;
+        }
+
+        .btn-mark {
+            background: rgba(28, 30, 36, 0.90);
+            color: rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 24px;
+            padding: 11px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+        }
+
+        .btn-mark.active {
+            background: rgba(25, 90, 200, 0.88);
+            border-color: rgba(80, 150, 255, 0.45);
+            color: #ffffff;
+        }
+
+        /* ── Mark modal ─────────────────────────────────────── */
+        .mark-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0,0,0,0.55);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mark-modal-overlay.open { display: flex; }
+
+        .mark-modal {
+            background: #1c1e24;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px;
+            padding: 24px 28px;
+            width: 300px;
+            backdrop-filter: blur(16px);
+        }
+
+        .mark-modal h3 {
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 18px;
+            letter-spacing: 0.04em;
+        }
+
+        .mark-modal label {
+            display: block;
+            color: rgba(255,255,255,0.45);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .mark-modal input {
+            width: 100%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 15px;
+            padding: 9px 12px;
+            margin-bottom: 14px;
+            outline: none;
+        }
+
+        .mark-modal input:focus {
+            border-color: rgba(80,150,255,0.6);
+        }
+
+        .mark-modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .mark-modal-actions button {
+            flex: 1;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-modal-confirm {
+            background: rgba(25, 90, 200, 0.9);
+            color: #fff;
+        }
+
+        .btn-modal-tap {
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.75);
+            border: 1px solid rgba(255,255,255,0.12) !important;
+        }
+
+        .btn-modal-cancel {
+            background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.4);
+            border: 1px solid rgba(255,255,255,0.08) !important;
+        }
+
+        /* ── LLM Advice banner ──────────────────────────────── */
+        .advice-banner {
+            position: absolute;
+            bottom: 22px;
+            right: 14px;
+            z-index: 100;
+            background: rgba(28, 30, 36, 0.90);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 12px;
+            padding: 11px 16px;
+            max-width: 300px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: none;
+        }
+
+        .advice-label {
+            color: rgba(255,255,255,0.38);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .advice-text {
+            color: rgba(255,255,255,0.88);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        /* ── Status dot ─────────────────────────────────────── */
+        .status-dot {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(28, 30, 36, 0.88);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 6px 14px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #f44336;
+            transition: background 0.4s;
+        }
+
+        .dot.live { background: #00e676; animation: pulse 2s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .status-text {
+            color: rgba(255,255,255,0.6);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        /* Leaflet overrides */
+        .leaflet-control-zoom { display: none; }
+        .leaflet-control-attribution {
+            font-size: 9px;
+            opacity: 0.35;
+            background: transparent !important;
+            color: rgba(255,255,255,0.4) !important;
+        }
+        .leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Left Instrument Panel -->
+<div class="panel">
+    <div class="card card-tws">
+        <span class="lbl">TWS</span>
+        <span class="val val-tws" id="val-tws">— Kts</span>
+    </div>
+    <div class="card-split">
+        <div class="split-col">
+            <span class="lbl">TWD</span>
+            <span class="val" id="val-twd">—°</span>
+        </div>
+        <div class="split-col">
+            <span class="lbl">AWD</span>
+            <span class="val" id="val-awd">—°</span>
+        </div>
+    </div>
+    <div class="card">
+        <span class="lbl">SOG</span>
+        <span class="val" id="val-sog">— Kts</span>
+    </div>
+    <div class="card">
+        <span class="lbl">AWA</span>
+        <span class="val" id="val-awa">—°</span>
+    </div>
+    <div class="card">
+        <span class="lbl">VMG</span>
+        <span class="val" id="val-vmg">— Kts</span>
+    </div>
+    <div class="card">
+        <span class="lbl">TTM</span>
+        <span class="val" id="val-ttm">— Min</span>
+    </div>
+    <div class="card-shift neutral" id="card-shift">
+        <span class="lbl-shift neutral" id="lbl-shift">—</span>
+        <span class="val-shift neutral" id="val-shift">—</span>
+    </div>
+</div>
+
+<!-- Wind Direction Card -->
+<div class="wind-card">
+    <div class="wind-arrow-wrap" id="wind-arrow-wrap">
+        <svg width="22" height="26" viewBox="0 0 22 26">
+            <polygon points="11,0 22,26 11,20 0,26" fill="#c62828"/>
+        </svg>
+    </div>
+    <span class="wind-deg" id="wind-deg">—°</span>
+</div>
+
+<!-- Connection Status -->
+<div class="status-dot">
+    <div class="dot" id="status-dot"></div>
+    <span class="status-text" id="status-text">Demo Mode</span>
+</div>
+
+<!-- Mark Buttons -->
+<div class="mark-btns">
+    <button class="btn-mark" id="btn-upwind">⚑  Upwind Mark</button>
+    <button class="btn-mark" id="btn-downwind">⚑  Downwind Mark</button>
+</div>
+
+<!-- Mark Coordinate Modal -->
+<div class="mark-modal-overlay" id="mark-modal-overlay">
+    <div class="mark-modal">
+        <h3 id="mark-modal-title">Set Upwind Mark</h3>
+        <label>Latitude</label>
+        <input type="number" id="mark-input-lat" placeholder="e.g. 41.5010" step="0.0001"/>
+        <label>Longitude</label>
+        <input type="number" id="mark-input-lon" placeholder="e.g. -71.3180" step="0.0001"/>
+        <div class="mark-modal-actions">
+            <button class="btn-modal-confirm" id="btn-modal-confirm">Set Mark</button>
+            <button class="btn-modal-tap" id="btn-modal-tap">Tap Chart</button>
+            <button class="btn-modal-cancel" id="btn-modal-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- LLM Advice -->
+<div class="advice-banner" id="advice-banner">
+    <div class="advice-label">Tactical Advice</div>
+    <div class="advice-text" id="advice-text"></div>
+</div>
+
+<script>
+// ── MAP SETUP ────────────────────────────────────────────────────
+const map = L.map('map', {
+    zoomControl: false,
+    attributionControl: true,
+    tap: true,
+    tapTolerance: 15,
+});
+
+// Esri Ocean Base (closest to Navionics look)
+L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Esri, GEBCO, NOAA', maxZoom: 17 }
+).addTo(map);
+
+// OpenSeaMap nautical overlay (depth contours, buoys, marks)
+L.tileLayer(
+    'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+    { opacity: 0.75, maxZoom: 17 }
+).addTo(map);
+
+// ── STATE ────────────────────────────────────────────────────────
+let boatLat     = 41.4850;
+let boatLon     = -71.3150;
+let markLat     = 41.5010;
+let markLon     = -71.3180;
+let dwMarkLat   = null;
+let dwMarkLon   = null;
+let heading     = 330;
+let twd         = 260;
+let optTWA      = 42;
+let settingMark = null;  // 'upwind' | 'downwind' | null
+let tackBaseline    = twd;
+let lastOnStarboard = null;
+let isLive      = false;
+
+// ── BOAT ICON ────────────────────────────────────────────────────
+function boatIcon(hdg) {
+    return L.divIcon({
+        html: `<div style="
+            width:36px;height:36px;
+            display:flex;align-items:center;justify-content:center;
+            transform:rotate(${hdg}deg);
+            transform-origin:center center;
+            filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
+            <svg width="22" height="30" viewBox="0 0 22 30">
+                <polygon points="11,0 22,30 11,23 0,30"
+                    fill="#e53935" stroke="rgba(255,255,255,0.75)" stroke-width="1.2"/>
+            </svg>
+        </div>`,
+        iconSize:   [36, 36],
+        iconAnchor: [18, 18],
+        className:  '',
+    });
+}
+
+const boatMarker = L.marker([boatLat, boatLon], {
+    icon: boatIcon(heading),
+    zIndexOffset: 1000,
+}).addTo(map);
+
+// ── MARK ICONS ───────────────────────────────────────────────────
+function makeMarkIcon(color, glow) {
+    return L.divIcon({
+        html: `<div style="
+            width:16px;height:16px;
+            background:${color};
+            border-radius:50%;
+            border:2.5px solid rgba(255,255,255,0.85);
+            box-shadow:0 0 10px ${glow};">
+        </div>`,
+        iconSize:   [16, 16],
+        iconAnchor: [8, 8],
+        className:  '',
+    });
+}
+
+const upwindIcon   = makeMarkIcon('#f9a825', 'rgba(249,168,37,0.7)');
+const downwindIcon = makeMarkIcon('#00e676', 'rgba(0,230,118,0.7)');
+
+const markMarker = L.marker([markLat, markLon], {
+    icon: upwindIcon,
+    zIndexOffset: 999,
+}).addTo(map);
+
+const dwMarkMarker = L.marker([0, 0], {
+    icon: downwindIcon,
+    zIndexOffset: 998,
+}); // not added to map until set
+
+// ── LINES ────────────────────────────────────────────────────────
+const portLayline = L.polyline([], {
+    color: '#4a90e2', weight: 2.5, opacity: 0.85,
+}).addTo(map);
+
+const stbdLayline = L.polyline([], {
+    color: '#4a90e2', weight: 2.5, opacity: 0.85,
+}).addTo(map);
+
+const headingLine = L.polyline([], {
+    color: '#4a90e2', weight: 2, opacity: 0.65,
+    dashArray: '9 6',
+}).addTo(map);
+
+// ── GEO MATH ─────────────────────────────────────────────────────
+function destPoint(lat, lon, bearingDeg, distKm) {
+    const R    = 6371;
+    const d    = distKm / R;
+    const brng = bearingDeg * Math.PI / 180;
+    const φ1   = lat * Math.PI / 180;
+    const λ1   = lon * Math.PI / 180;
+    const φ2   = Math.asin(
+        Math.sin(φ1) * Math.cos(d) +
+        Math.cos(φ1) * Math.sin(d) * Math.cos(brng)
+    );
+    const λ2   = λ1 + Math.atan2(
+        Math.sin(brng) * Math.sin(d) * Math.cos(φ1),
+        Math.cos(d) - Math.sin(φ1) * Math.sin(φ2)
+    );
+    return [φ2 * 180 / Math.PI, λ2 * 180 / Math.PI];
+}
+
+// ── DRAW LAYLINES ────────────────────────────────────────────────
+// Laylines extend FROM the mark downwind (away from mark direction)
+// Port layline:  bearing = TWD + optTWA  (boat sailing on port tack toward mark)
+// Stbd layline:  bearing = TWD - optTWA  (boat sailing on stbd tack toward mark)
+function drawLaylines() {
+    const distKm   = 7.5; // ~4 nm extension
+    const portBrng = (twd + optTWA + 360) % 360;
+    const stbdBrng = (twd - optTWA + 360) % 360;
+    const portEnd  = destPoint(markLat, markLon, portBrng, distKm);
+    const stbdEnd  = destPoint(markLat, markLon, stbdBrng, distKm);
+    portLayline.setLatLngs([[markLat, markLon], portEnd]);
+    stbdLayline.setLatLngs([[markLat, markLon], stbdEnd]);
+}
+
+// ── DRAW HEADING LINE ────────────────────────────────────────────
+// Extends from boat in heading direction to approximate next maneuver point
+function drawHeadingLine(sogKts) {
+    const nm  = Math.max(0.8, (sogKts * 4) / 60); // 4 min at SOG
+    const km  = nm * 1.852;
+    const end = destPoint(boatLat, boatLon, heading, km);
+    headingLine.setLatLngs([[boatLat, boatLon], end]);
+}
+
+// ── TACK / JIBE DETECTION ────────────────────────────────────────
+function detectTackAndUpdateBaseline(currentHeading, currentTWD) {
+    const twa         = ((currentTWD - currentHeading) + 360) % 360;
+    const onStarboard = twa < 180;
+
+    if (lastOnStarboard !== null && onStarboard !== lastOnStarboard) {
+        // Tack or jibe occurred — reset baseline to current TWD
+        tackBaseline = currentTWD;
+    }
+    lastOnStarboard = onStarboard;
+    return onStarboard;
+}
+
+// ── UPDATE LIFT / HEADER DISPLAY ─────────────────────────────────
+// Degrees the wind has shifted since the last tack or jibe
+function updateShiftDisplay(currentTWD, onStarboard) {
+    let delta = currentTWD - tackBaseline;
+    // Normalise to ±180
+    while (delta >  180) delta -= 360;
+    while (delta < -180) delta += 360;
+
+    // On starboard: wind clocking clockwise = lift (+)
+    // On port:      wind clocking clockwise = header (-)
+    const lift = onStarboard ? delta : -delta;
+
+    const card = document.getElementById('card-shift');
+    const lbl  = document.getElementById('lbl-shift');
+    const val  = document.getElementById('val-shift');
+
+    const setState = (state, lblText, valText) => {
+        card.className = `card-shift ${state}`;
+        lbl.className  = `lbl-shift ${state}`;
+        lbl.textContent = lblText;
+        val.className  = `val-shift ${state}`;
+        val.textContent = valText;
+    };
+
+    if (Math.abs(lift) < 2) {
+        setState('neutral', '—', `${Math.abs(lift).toFixed(0)}°`);
+    } else if (lift > 0) {
+        setState('lift', 'LIFT', `+${lift.toFixed(0)}°`);
+    } else {
+        setState('header', 'HEADER', `${lift.toFixed(0)}°`);
+    }
+}
+
+// ── WIND ARROW ───────────────────────────────────────────────────
+function updateWindArrow(twdDeg) {
+    document.getElementById('wind-arrow-wrap').style.transform = `rotate(${twdDeg}deg)`;
+    document.getElementById('wind-deg').textContent = `${Math.round(twdDeg)}°`;
+}
+
+// ── TTM CALCULATION ──────────────────────────────────────────────
+// Estimates time to maneuver via distance to the active layline
+// divided by VMG — refined by LLM advice from server
+function calcTTM(boatLt, boatLn, sogKts, hdg, twdDeg, optAngle) {
+    // Find which layline the boat is approaching
+    const twa = ((twdDeg - hdg) + 360) % 360;
+    const onStarboard = twa < 180;
+
+    // Active layline bearing from mark (the one we're heading toward)
+    const activeBrng = onStarboard
+        ? (twdDeg - optAngle + 360) % 360
+        : (twdDeg + optAngle + 360) % 360;
+
+    // Approximate layline end point (far end, 10nm out)
+    const layEnd = destPoint(markLat, markLon, activeBrng, 18);
+
+    // Find closest point on layline to boat using parametric projection
+    const [x1, y1] = [markLon, markLat];
+    const [x2, y2] = [layEnd[1], layEnd[0]];
+    const [px, py] = [boatLn, boatLt];
+
+    const dx = x2 - x1, dy = y2 - y1;
+    const t  = Math.max(0, Math.min(1,
+        ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
+    ));
+    const closestLon = x1 + t * dx;
+    const closestLat = y1 + t * dy;
+
+    // Distance in nm from boat to layline intersection
+    const dLat = (closestLat - boatLt) * Math.PI / 180;
+    const dLon = (closestLon - boatLn) * Math.PI / 180;
+    const a    = Math.sin(dLat/2)**2 +
+                 Math.cos(boatLt*Math.PI/180) * Math.cos(closestLat*Math.PI/180) *
+                 Math.sin(dLon/2)**2;
+    const distNm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 0.539957;
+
+    const ttmMin = sogKts > 0 ? (distNm / sogKts) * 60 : 0;
+    return Math.round(ttmMin);
+}
+
+// ── UPDATE PANEL ─────────────────────────────────────────────────
+function clearPanel() {
+    document.getElementById('val-tws').textContent = '---';
+    document.getElementById('val-twd').textContent = '---';
+    document.getElementById('val-awd').textContent = '---';
+    document.getElementById('val-sog').textContent = '---';
+    document.getElementById('val-awa').textContent = '---';
+    document.getElementById('val-vmg').textContent = '---';
+    document.getElementById('val-ttm').textContent = '---';
+}
+
+function updatePanel(d) {
+    document.getElementById('val-tws').textContent = `${(+d.tws).toFixed(1)} Kts`;
+    document.getElementById('val-twd').textContent = `${Math.round(+d.twd)}°`;
+
+    const awd = +d.awd;
+    document.getElementById('val-awd').textContent = `${awd >= 0 ? '' : ''}${Math.round(awd)}°`;
+
+    document.getElementById('val-sog').textContent = `${(+d.sog).toFixed(1)} Kts`;
+    document.getElementById('val-awa').textContent = `${(+d.awa).toFixed(2)}°`;
+    document.getElementById('val-vmg').textContent = `${(+d.vmg).toFixed(2)} Kts`;
+    document.getElementById('val-ttm').textContent = `${d.ttm} Min`;
+
+    if (d.advice) {
+        document.getElementById('advice-text').textContent = d.advice;
+        document.getElementById('advice-banner').style.display = 'block';
+    }
+}
+
+// ── STATUS INDICATOR ─────────────────────────────────────────────
+function setStatus(live) {
+    isLive = live;
+    const dot  = document.getElementById('status-dot');
+    const text = document.getElementById('status-text');
+    dot.className  = live ? 'dot live' : 'dot';
+    text.textContent = live ? 'Live' : 'Demo Mode';
+}
+
+// ── MARK PLACEMENT ───────────────────────────────────────────────
+function openMarkModal(type) {
+    settingMark = null;
+    document.getElementById('mark-modal-title').textContent =
+        type === 'upwind' ? 'Set Upwind Mark' : 'Set Downwind Mark';
+    const lat = type === 'upwind' ? markLat : (dwMarkLat ?? markLat);
+    const lon = type === 'upwind' ? markLon : (dwMarkLon ?? markLon);
+    document.getElementById('mark-input-lat').value = lat.toFixed(4);
+    document.getElementById('mark-input-lon').value = lon.toFixed(4);
+    document.getElementById('mark-modal-overlay').dataset.type = type;
+    document.getElementById('mark-modal-overlay').classList.add('open');
+}
+
+function closeMarkModal() {
+    document.getElementById('mark-modal-overlay').classList.remove('open');
+    document.getElementById('btn-upwind').classList.remove('active');
+    document.getElementById('btn-downwind').classList.remove('active');
+    map.getContainer().style.cursor = '';
+}
+
+function applyMark(type, lat, lon) {
+    if (type === 'upwind') {
+        markLat = lat; markLon = lon;
+        markMarker.setLatLng([lat, lon]);
+        drawLaylines();
+    } else {
+        dwMarkLat = lat; dwMarkLon = lon;
+        dwMarkMarker.setLatLng([lat, lon]);
+        if (!map.hasLayer(dwMarkMarker)) dwMarkMarker.addTo(map);
+    }
+}
+
+document.getElementById('btn-upwind').addEventListener('click', () => openMarkModal('upwind'));
+document.getElementById('btn-downwind').addEventListener('click', () => openMarkModal('downwind'));
+
+document.getElementById('btn-modal-confirm').addEventListener('click', () => {
+    const type = document.getElementById('mark-modal-overlay').dataset.type;
+    const lat  = parseFloat(document.getElementById('mark-input-lat').value);
+    const lon  = parseFloat(document.getElementById('mark-input-lon').value);
+    if (isNaN(lat) || isNaN(lon)) return;
+    applyMark(type, lat, lon);
+    closeMarkModal();
+});
+
+document.getElementById('btn-modal-tap').addEventListener('click', () => {
+    const type = document.getElementById('mark-modal-overlay').dataset.type;
+    settingMark = type;
+    closeMarkModal();
+    document.getElementById(type === 'upwind' ? 'btn-upwind' : 'btn-downwind').classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+});
+
+document.getElementById('btn-modal-cancel').addEventListener('click', closeMarkModal);
+
+map.on('click', (e) => {
+    if (!settingMark) return;
+    applyMark(settingMark, e.latlng.lat, e.latlng.lng);
+    settingMark = null;
+    document.getElementById('btn-upwind').classList.remove('active');
+    document.getElementById('btn-downwind').classList.remove('active');
+    map.getContainer().style.cursor = '';
+});
+
+// ── API POLLING ──────────────────────────────────────────────────
+async function fetchAndRender() {
+    try {
+        const res = await fetch('/tactics');
+        if (!res.ok) throw new Error();
+        const d = await res.json();
+        if (d.status) throw new Error('no instruments');
+
+        // Update state from API
+        twd    = d.twd      ?? twd;
+        optTWA = d.optimal_twa ?? optTWA;
+        heading = d.heading ?? heading;
+        const sog = d.sog ?? 11;
+
+        if (d.lat && d.lon) {
+            boatLat = d.lat;
+            boatLon = d.lon;
+            boatMarker.setLatLng([boatLat, boatLon]);
+        }
+
+        const onStarboard = detectTackAndUpdateBaseline(heading, twd);
+        const ttm = d.ttm ?? calcTTM(boatLat, boatLon, sog, heading, twd, optTWA);
+
+        updatePanel({ ...d, ttm });
+        updateWindArrow(twd);
+        updateShiftDisplay(twd, onStarboard);
+        boatMarker.setIcon(boatIcon(heading));
+        drawLaylines();
+        drawHeadingLine(sog);
+        setStatus(true);
+
+    } catch {
+        clearPanel();
+        runDemo();
+        setStatus(false);
+    }
+}
+
+// ── DEMO MODE ────────────────────────────────────────────────────
+let demoTick = 0;
+function runDemo() {
+    demoTick++;
+    // Slowly oscillating wind shift to show LIFT/HEADER changing
+    const mockTWD = 260 + Math.sin(demoTick / 40) * 10;
+    const mockSOG = 11;
+    const mockHdg = 330;
+
+    twd    = mockTWD;
+    optTWA = 42;
+    heading = mockHdg;
+
+    const onStarboard = detectTackAndUpdateBaseline(mockHdg, mockTWD);
+    const ttm = calcTTM(boatLat, boatLon, mockSOG, mockHdg, mockTWD, optTWA);
+
+    updatePanel({
+        tws: 17.0,
+        twd: mockTWD,
+        awd: -21.0,
+        sog: mockSOG,
+        awa: 21.37,
+        vmg: 10.64,
+        ttm,
+        advice: '',
+    });
+
+    updateWindArrow(mockTWD);
+    updateShiftDisplay(mockTWD, onStarboard);
+    boatMarker.setIcon(boatIcon(mockHdg));
+    drawLaylines();
+    drawHeadingLine(mockSOG);
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+map.setView([boatLat, boatLon], 12);
+drawLaylines();
+drawHeadingLine(11);
+updateWindArrow(twd);
+updateShiftDisplay(twd, true);
+
+fetchAndRender();
+setInterval(fetchAndRender, 500);
+</script>
+</body>
+</html>

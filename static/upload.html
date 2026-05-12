@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Polar Upload — Advanced Tactics</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0d1117;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 32px 24px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.45);
+            font-size: 14px;
+            margin-bottom: 36px;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: rgba(255,255,255,0.5);
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            letter-spacing: 0.03em;
+            margin-bottom: 28px;
+        }
+
+        /* ── Cards ─────────────────────────────────────────────── */
+        .card {
+            background: rgba(28, 30, 36, 0.9);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            margin-bottom: 18px;
+            color: rgba(255,255,255,0.9);
+        }
+
+        /* ── Form ───────────────────────────────────────────────── */
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.45);
+            margin-bottom: 8px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #ffffff;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: rgba(74, 144, 226, 0.6);
+        }
+
+        /* ── Drop zone ──────────────────────────────────────────── */
+        .drop-zone {
+            border: 2px dashed rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 40px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .drop-zone.drag-over {
+            border-color: rgba(74, 144, 226, 0.7);
+            background: rgba(74, 144, 226, 0.07);
+        }
+
+        .drop-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        .drop-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .drop-label {
+            color: rgba(255,255,255,0.55);
+            font-size: 15px;
+            margin-bottom: 6px;
+        }
+
+        .drop-formats {
+            color: rgba(255,255,255,0.3);
+            font-size: 12px;
+            letter-spacing: 0.05em;
+        }
+
+        .file-selected {
+            color: #4a90e2;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        /* ── Buttons ────────────────────────────────────────────── */
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .btn:active { transform: scale(0.98); }
+
+        .btn-primary {
+            background: #4a90e2;
+            color: #ffffff;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.07);
+            color: rgba(255,255,255,0.7);
+            border: 1px solid rgba(255,255,255,0.1);
+            margin-top: 10px;
+        }
+
+        /* ── Boat list ──────────────────────────────────────────── */
+        .boat-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .boat-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .boat-item:hover {
+            background: rgba(255,255,255,0.07);
+        }
+
+        .boat-item.active-boat {
+            background: rgba(74, 144, 226, 0.12);
+            border-color: rgba(74, 144, 226, 0.35);
+        }
+
+        .boat-name {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .boat-badge {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(74, 144, 226, 0.2);
+            color: #4a90e2;
+        }
+
+        .boat-badge.inactive {
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.4);
+        }
+
+        /* ── Toast notification ─────────────────────────────────── */
+        .toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: rgba(28, 30, 36, 0.96);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 14px 22px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            opacity: 0;
+            z-index: 999;
+            white-space: nowrap;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success { border-color: rgba(0, 210, 100, 0.4); }
+        .toast.error   { border-color: rgba(255, 60, 60, 0.4); }
+
+        /* ── Status info ────────────────────────────────────────── */
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .status-cell {
+            background: rgba(255,255,255,0.04);
+            border-radius: 10px;
+            padding: 14px;
+        }
+
+        .status-cell-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.35);
+            margin-bottom: 6px;
+        }
+
+        .status-cell-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.85);
+        }
+
+        .dot-live  { color: #00e676; }
+        .dot-off   { color: #ff5252; }
+    </style>
+</head>
+<body>
+
+<a class="back-link" href="/">← Back to Dashboard</a>
+
+<h1>Polar Upload</h1>
+<p class="subtitle">Upload a polar file to enable accurate VMG, layline, and TTM calculations.</p>
+
+<!-- System status -->
+<div class="card" id="status-card">
+    <div class="card-title">System Status</div>
+    <div class="status-grid">
+        <div class="status-cell">
+            <div class="status-cell-label">Instruments</div>
+            <div class="status-cell-value" id="st-instruments">—</div>
+        </div>
+        <div class="status-cell">
+            <div class="status-cell-label">Brand</div>
+            <div class="status-cell-value" id="st-brand">—</div>
+        </div>
+        <div class="status-cell">
+            <div class="status-cell-label">Active Polar</div>
+            <div class="status-cell-value" id="st-polar">None</div>
+        </div>
+        <div class="status-cell">
+            <div class="status-cell-label">Mark Set</div>
+            <div class="status-cell-value" id="st-mark">No</div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload form -->
+<div class="card">
+    <div class="card-title">Upload New Polar</div>
+
+    <label>Boat Name</label>
+    <input type="text" id="boat-name" placeholder="e.g. J/24 Hull 1234" autocomplete="off"/>
+
+    <label>Polar File</label>
+    <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".pol,.txt,.csv,.json"/>
+        <div class="drop-icon">📂</div>
+        <div class="drop-label">Tap to select or drag &amp; drop</div>
+        <div class="drop-formats">Expedition .pol · CSV · ORC JSON</div>
+        <div class="file-selected" id="file-name"></div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-upload" disabled>Upload Polar</button>
+</div>
+
+<!-- Stored polars -->
+<div class="card">
+    <div class="card-title">Stored Polars</div>
+    <div class="boat-list" id="boat-list">
+        <div style="color:rgba(255,255,255,0.3);font-size:14px;text-align:center;padding:16px 0;">
+            No polars uploaded yet
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const boatNameInput = document.getElementById('boat-name');
+const fileInput     = document.getElementById('file-input');
+const fileNameEl    = document.getElementById('file-name');
+const dropZone      = document.getElementById('drop-zone');
+const btnUpload     = document.getElementById('btn-upload');
+const boatList      = document.getElementById('boat-list');
+const toast         = document.getElementById('toast');
+
+let selectedFile = null;
+let activePolar  = null;
+
+// ── Drag & drop ───────────────────────────────────────────────────
+dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) setFile(file);
+});
+
+fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
+
+boatNameInput.addEventListener('input', checkReady);
+
+function setFile(file) {
+    selectedFile = file;
+    fileNameEl.textContent = `✓ ${file.name}`;
+    checkReady();
+}
+
+function checkReady() {
+    btnUpload.disabled = !(selectedFile && boatNameInput.value.trim());
+}
+
+// ── Upload ────────────────────────────────────────────────────────
+btnUpload.addEventListener('click', async () => {
+    if (!selectedFile || !boatNameInput.value.trim()) return;
+
+    btnUpload.disabled   = true;
+    btnUpload.textContent = 'Uploading…';
+
+    const form = new FormData();
+    form.append('file', selectedFile);
+    form.append('boat_name', boatNameInput.value.trim());
+
+    try {
+        const res  = await fetch('/polars/upload', { method: 'POST', body: form });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.detail || 'Upload failed');
+
+        showToast(`✓ ${data.boat} uploaded  (TWS ${data.tws_range})`, 'success');
+        boatNameInput.value = '';
+        selectedFile        = null;
+        fileNameEl.textContent = '';
+        fileInput.value     = '';
+        await loadBoats();
+
+    } catch (err) {
+        showToast(`✗ ${err.message}`, 'error');
+    } finally {
+        btnUpload.disabled   = false;
+        btnUpload.textContent = 'Upload Polar';
+        checkReady();
+    }
+});
+
+// ── Boat list ─────────────────────────────────────────────────────
+async function loadBoats() {
+    try {
+        const [boatsRes, activeRes] = await Promise.all([
+            fetch('/polars'),
+            fetch('/polars/active'),
+        ]);
+        const { boats }  = await boatsRes.json();
+        const activeData = await activeRes.json();
+        activePolar      = activeData.active;
+
+        if (!boats.length) {
+            boatList.innerHTML = `
+                <div style="color:rgba(255,255,255,0.3);font-size:14px;text-align:center;padding:16px 0;">
+                    No polars uploaded yet
+                </div>`;
+            return;
+        }
+
+        boatList.innerHTML = boats.map(name => `
+            <div class="boat-item ${name === activePolar ? 'active-boat' : ''}"
+                 onclick="activateBoat('${name}')">
+                <span class="boat-name">${name}</span>
+                <span class="boat-badge ${name === activePolar ? '' : 'inactive'}">
+                    ${name === activePolar ? 'Active' : 'Tap to activate'}
+                </span>
+            </div>
+        `).join('');
+    } catch {
+        boatList.innerHTML = `<div style="color:rgba(255,82,82,0.8);font-size:14px;">Could not load polars</div>`;
+    }
+}
+
+async function activateBoat(name) {
+    const form = new FormData();
+    form.append('boat_name', name);
+    try {
+        const res = await fetch('/polars/activate', { method: 'POST', body: form });
+        const d   = await res.json();
+        if (!res.ok) throw new Error(d.detail);
+        showToast(`✓ ${name} activated`, 'success');
+        await loadBoats();
+        await loadStatus();
+    } catch (err) {
+        showToast(`✗ ${err.message}`, 'error');
+    }
+}
+
+// ── Status ────────────────────────────────────────────────────────
+async function loadStatus() {
+    try {
+        const res  = await fetch('/status');
+        const data = await res.json();
+
+        document.getElementById('st-instruments').innerHTML =
+            data.instruments
+            ? '<span class="dot-live">● Live</span>'
+            : '<span class="dot-off">● No signal</span>';
+
+        document.getElementById('st-brand').textContent =
+            data.brand.replace('_', ' ').toUpperCase();
+
+        document.getElementById('st-polar').textContent =
+            data.polar_boat || 'None';
+
+        document.getElementById('st-mark').textContent =
+            data.mark_set ? 'Yes' : 'No';
+
+    } catch {
+        document.getElementById('st-instruments').textContent = 'Offline';
+    }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+function showToast(msg, type = '') {
+    toast.textContent  = msg;
+    toast.className    = `toast ${type} show`;
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+loadBoats();
+loadStatus();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>
