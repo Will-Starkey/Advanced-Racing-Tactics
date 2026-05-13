@@ -13,6 +13,7 @@ Key computations:
 """
 
 import math
+import os
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -24,7 +25,7 @@ from polar.models import PolarData
 
 # ── Tuning constants ──────────────────────────────────────────────
 SHIFT_THRESHOLD_DEG   = 5.0    # smaller shifts treated as noise
-PERSISTENCE_WINDOW_S  = 60.0   # seconds a shift must hold to be "persistent"
+PERSISTENCE_WINDOW_S  = float(os.getenv("SIM_PERSISTENCE_WINDOW", "60.0"))
 LAYLINE_TOLERANCE_DEG = 3.0    # degrees either side of exact layline
 TACKING_PENALTY_S     = 18.0   # seconds of boatspeed lost per tack
 

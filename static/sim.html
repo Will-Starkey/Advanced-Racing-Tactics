@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tactics Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+            min-height: 100vh;
+            padding: 32px 24px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+        }
+
+        header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        header a {
+            color: rgba(255,255,255,0.5);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        header a:hover { color: #fff; border-color: rgba(255,255,255,0.3); }
+
+        .section-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.35);
+            margin-bottom: 14px;
+        }
+
+        /* ── Scenarios ── */
+        #scenario-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; }
+
+        .scenario-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .scenario-card:hover { border-color: rgba(255,255,255,0.15); }
+
+        .btn-start {
+            background: rgba(25, 90, 200, 0.85);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .btn-start:hover { background: rgba(40, 110, 230, 0.95); }
+
+        .scenario-info { flex: 1; }
+
+        .scenario-name {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .scenario-desc {
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+            line-height: 1.5;
+        }
+
+        .scenario-duration {
+            font-size: 12px;
+            color: rgba(255,255,255,0.3);
+            margin-top: 4px;
+        }
+
+        /* ── Status ── */
+        .status-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 20px 24px;
+            margin-bottom: 16px;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 14px;
+        }
+
+        .status-row:last-child { border-bottom: none; }
+
+        .status-key { color: rgba(255,255,255,0.4); }
+
+        .status-val { font-weight: 600; }
+
+        .status-val.running  { color: #00e676; }
+        .status-val.stopped  { color: rgba(255,255,255,0.3); }
+
+        /* Progress bar */
+        .progress-wrap {
+            background: rgba(255,255,255,0.07);
+            border-radius: 4px;
+            height: 4px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #195ac8;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.5s linear;
+        }
+
+        .btn-stop {
+            background: rgba(200, 30, 30, 0.75);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 28px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-stop:hover { background: rgba(230, 50, 50, 0.9); }
+
+        .hint {
+            margin-top: 24px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.25);
+            line-height: 1.6;
+        }
+
+        .hint a { color: rgba(255,255,255,0.4); }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>⛵ Tactics Simulator</h1>
+    <a href="/">← Main Display</a>
+</header>
+
+<div class="section-label">Scenarios</div>
+<div id="scenario-list">
+    <div style="color: rgba(255,255,255,0.3); font-size:13px;">Loading…</div>
+</div>
+
+<div class="section-label">Status</div>
+<div class="status-card">
+    <div class="status-row">
+        <span class="status-key">Running</span>
+        <span class="status-val stopped" id="s-running">No</span>
+    </div>
+    <div class="status-row">
+        <span class="status-key">Scenario</span>
+        <span class="status-val" id="s-scenario">—</span>
+    </div>
+    <div class="status-row">
+        <span class="status-key">Step</span>
+        <span class="status-val" id="s-step">—</span>
+    </div>
+    <div class="status-row">
+        <span class="status-key">Elapsed</span>
+        <span class="status-val" id="s-elapsed">—</span>
+    </div>
+    <div class="progress-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+    </div>
+</div>
+
+<button class="btn-stop" onclick="stopSim()">■ Stop Simulation</button>
+
+<div class="hint">
+    Open the <a href="/">main display</a> in another tab to watch the map,
+    instrument panel, and LLM advice update in real time.<br>
+    Set <code>SIM_PERSISTENCE_WINDOW=8</code> and <code>SIM_ONLY=true</code>
+    in your <code>.env</code> for fast, instrument-free simulation.
+</div>
+
+<script>
+let scenarioDurations = {};
+
+async function loadScenarios() {
+    const res  = await fetch('/sim/scenarios');
+    const data = await res.json();
+    const list = document.getElementById('scenario-list');
+    list.innerHTML = '';
+
+    for (const s of data.scenarios) {
+        scenarioDurations[s.name] = s.total_seconds;
+
+        const card = document.createElement('div');
+        card.className = 'scenario-card';
+        card.innerHTML = `
+            <button class="btn-start" onclick="startScenario('${s.name}')">▶ Start</button>
+            <div class="scenario-info">
+                <div class="scenario-name">${s.name.replace(/_/g, ' ')}</div>
+                <div class="scenario-desc">${s.description}</div>
+                <div class="scenario-duration">${s.total_seconds}s total</div>
+            </div>
+        `;
+        list.appendChild(card);
+    }
+}
+
+async function startScenario(name) {
+    await fetch('/sim/start/' + name, { method: 'POST' });
+}
+
+async function stopSim() {
+    await fetch('/sim/stop', { method: 'POST' });
+}
+
+async function pollStatus() {
+    try {
+        const res = await fetch('/sim/status');
+        const s   = await res.json();
+
+        const runEl = document.getElementById('s-running');
+        runEl.textContent  = s.running ? 'Yes' : 'No';
+        runEl.className    = 'status-val ' + (s.running ? 'running' : 'stopped');
+
+        document.getElementById('s-scenario').textContent =
+            s.scenario_name ? s.scenario_name.replace(/_/g, ' ') : '—';
+        document.getElementById('s-step').textContent    =
+            s.current_step_label || '—';
+        document.getElementById('s-elapsed').textContent =
+            s.running ? s.elapsed_seconds + 's' : '—';
+
+        const total = scenarioDurations[s.scenario_name] || 1;
+        const pct   = s.running ? Math.min(100, (s.elapsed_seconds / total) * 100) : 0;
+        document.getElementById('progress-bar').style.width = pct + '%';
+    } catch (_) {}
+}
+
+loadScenarios();
+setInterval(pollStatus, 1000);
+</script>
+</body>
+</html>

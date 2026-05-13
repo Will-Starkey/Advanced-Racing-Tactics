@@ -6,7 +6,9 @@ Detects B&G vs Garmin instruments on startup via Signal K.
 
 import asyncio
 import os
+import sys
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, UploadFile
@@ -19,6 +21,7 @@ from instruments.garmin_adapter import GarminAdapter
 from llm_bridge import get_tactical_advice
 from polar.manager import PolarManager
 from signalk_client import SignalKClient
+from simulator import ALL_SCENARIOS, ScenarioRunner, SimState
 from tactics_engine import TacticsEngine
 
 load_dotenv()
@@ -32,6 +35,10 @@ latest_advice   = ""
 advice_cooldown = 0
 brand           = InstrumentBrand.UNKNOWN
 adapter         = None
+
+# ── Simulation state ──────────────────────────────────────────────
+sim_state:  SimState                    = SimState()
+sim_runner: Optional[ScenarioRunner]   = None
 
 
 def on_instrument_update(raw: dict):
@@ -54,7 +61,7 @@ def on_instrument_update(raw: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global brand, adapter
+    global brand, adapter, sim_runner
 
     # Detect instrument brand from Signal K network
     brand   = await detect_brand()
@@ -65,13 +72,23 @@ async def lifespan(app: FastAPI):
     )
     print(f"[tactics] Instrument brand detected: {brand.value}")
 
-    # Start Signal K WebSocket listener
-    sk_client = SignalKClient(on_update=on_instrument_update)
-    task = asyncio.create_task(sk_client.connect_with_retry())
+    # Create simulator runner (always available, even in live mode)
+    sim_runner = ScenarioRunner(engine, sim_state, sys.modules[__name__])
+
+    # Start Signal K only when not in SIM_ONLY mode
+    sim_only = os.getenv("SIM_ONLY", "false").lower() == "true"
+    if sim_only:
+        print("[tactics] SIM_ONLY mode — SignalK client not started")
+        task = None
+    else:
+        sk_client = SignalKClient(on_update=on_instrument_update)
+        task = asyncio.create_task(sk_client.connect_with_retry())
 
     yield
 
-    task.cancel()
+    if task:
+        task.cancel()
+    sim_runner.stop()
 
 
 app = FastAPI(title="Advanced Tactics Display", lifespan=lifespan)
@@ -204,6 +221,50 @@ async def status():
         "polar_loaded": polar_manager.active is not None,
         "polar_boat":   polar_manager.active.boat_name if polar_manager.active else None,
         "mark_set":     engine.mark_lat is not None,
+    }
+
+
+# ── Simulation endpoints ──────────────────────────────────────────
+@app.get("/sim/scenarios")
+async def list_sim_scenarios():
+    return {
+        "scenarios": [
+            {
+                "name":          s.name,
+                "description":   s.description,
+                "step_count":    len(s.steps),
+                "total_seconds": sum(st.duration_seconds for st in s.steps),
+            }
+            for s in ALL_SCENARIOS.values()
+        ]
+    }
+
+
+@app.post("/sim/start/{scenario_name}")
+async def start_sim(scenario_name: str):
+    if scenario_name not in ALL_SCENARIOS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown scenario '{scenario_name}'. "
+                   f"Available: {list(ALL_SCENARIOS.keys())}",
+        )
+    sim_runner.start(ALL_SCENARIOS[scenario_name])
+    return {"status": "started", "scenario": scenario_name}
+
+
+@app.post("/sim/stop")
+async def stop_sim():
+    sim_runner.stop()
+    return {"status": "stopped"}
+
+
+@app.get("/sim/status")
+async def get_sim_status():
+    return {
+        "running":            sim_state.running,
+        "scenario_name":      sim_state.scenario_name,
+        "current_step_label": sim_state.current_step_label,
+        "elapsed_seconds":    round(sim_state.elapsed_seconds, 1),
     }
 
 
