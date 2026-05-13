@@ -113,9 +113,22 @@ async def get_tactics():
         "optimal_twa": state.optimal_twa,
         "ttm":         state.ttm_minutes,
         "laylines": {
-            "port":     state.port_layline,
+            "port":      state.port_layline,
             "starboard": state.stbd_layline,
         },
+
+        # Persistent shift & tacking recommendation
+        "shift_state":              state.shift_state,
+        "shift_age_seconds":        state.shift_age_seconds,
+        "on_layline":               state.on_layline,
+        "overstanding":             state.overstanding,
+        "vmg_current_tack":         state.vmg_current_tack,
+        "vmg_other_tack":           state.vmg_other_tack,
+        "vmg_gain_from_tack":       state.vmg_gain_from_tack,
+        "tack_recommendation":      state.tack_recommendation,
+        "tack_recommendation_reason": state.tack_recommendation_reason,
+        "bearing_to_mark":          state.bearing_to_mark,
+        "dist_to_mark_nm":          state.dist_to_mark_nm,
 
         # LLM advice
         "advice": latest_advice,

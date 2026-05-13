@@ -1,0 +1,15 @@
+[Unit]
+Description=Sailing Tactics System
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/tactics_system
+EnvironmentFile=/home/pi/tactics_system/.env
+ExecStart=/home/pi/tactics_system/venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

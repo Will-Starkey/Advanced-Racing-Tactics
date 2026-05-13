@@ -375,6 +375,34 @@
             text-transform: uppercase;
         }
 
+        /* ── Settings button ────────────────────────────────── */
+        .btn-settings {
+            position: absolute;
+            bottom: 22px;
+            right: 18px;
+            z-index: 100;
+            background: rgba(28, 30, 36, 0.90);
+            color: rgba(255,255,255,0.7);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            font-size: 26px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: background 0.2s, color 0.2s;
+            text-decoration: none;
+        }
+
+        .btn-settings:hover {
+            background: rgba(50, 55, 70, 0.95);
+            color: #ffffff;
+        }
+
         /* Leaflet overrides */
         .leaflet-control-zoom { display: none; }
         .leaflet-control-attribution {
@@ -465,6 +493,9 @@
         </div>
     </div>
 </div>
+
+<!-- Settings Button -->
+<a class="btn-settings" href="/upload.html" title="Settings">⚙︎</a>
 
 <!-- LLM Advice -->
 <div class="advice-banner" id="advice-banner">
