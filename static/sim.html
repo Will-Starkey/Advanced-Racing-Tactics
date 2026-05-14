@@ -178,8 +178,24 @@
     <a href="/">← Main Display</a>
 </header>
 
-<div class="section-label">Scenarios</div>
-<div id="scenario-list">
+<div class="section-label">Race Simulation</div>
+<div id="scenario-list" style="margin-bottom: 24px;">
+    <div class="scenario-card">
+        <button class="btn-start" style="background: rgba(0,180,80,0.8);" onclick="startRace()">▶ Race</button>
+        <div class="scenario-info">
+            <div class="scenario-name">Race to Mark</div>
+            <div class="scenario-desc">
+                Random wind (12–17 kts, any direction). Boat starts on starboard tack
+                0.6 nm downwind of the mark. LLM autopilot tacks and calls laylines until
+                the boat reaches the upwind mark.
+            </div>
+            <div class="scenario-duration">Runs until mark reached (max 30 min)</div>
+        </div>
+    </div>
+</div>
+
+<div class="section-label">Preset Scenarios</div>
+<div id="preset-list">
     <div style="color: rgba(255,255,255,0.3); font-size:13px;">Loading…</div>
 </div>
 
@@ -221,7 +237,7 @@ let scenarioDurations = {};
 async function loadScenarios() {
     const res  = await fetch('/sim/scenarios');
     const data = await res.json();
-    const list = document.getElementById('scenario-list');
+    const list = document.getElementById('preset-list');
     list.innerHTML = '';
 
     for (const s of data.scenarios) {
@@ -239,6 +255,10 @@ async function loadScenarios() {
         `;
         list.appendChild(card);
     }
+}
+
+async function startRace() {
+    await fetch('/sim/start/race', { method: 'POST' });
 }
 
 async function startScenario(name) {
@@ -265,8 +285,16 @@ async function pollStatus() {
         document.getElementById('s-elapsed').textContent =
             s.running ? s.elapsed_seconds + 's' : '—';
 
-        const total = scenarioDurations[s.scenario_name] || 1;
-        const pct   = s.running ? Math.min(100, (s.elapsed_seconds / total) * 100) : 0;
+        // Race has no fixed duration — pulse bar back and forth instead
+        let pct = 0;
+        if (s.running) {
+            if (s.scenario_name === 'race_to_mark') {
+                pct = 50 + 50 * Math.sin(Date.now() / 800);  // animated pulse
+            } else {
+                const total = scenarioDurations[s.scenario_name] || 1;
+                pct = Math.min(100, (s.elapsed_seconds / total) * 100);
+            }
+        }
         document.getElementById('progress-bar').style.width = pct + '%';
     } catch (_) {}
 }

@@ -24,7 +24,7 @@ from signalk_client import SignalKClient
 from simulator import ALL_SCENARIOS, ScenarioRunner, SimState
 from tactics_engine import TacticsEngine
 
-load_dotenv()
+load_dotenv(override=True)
 
 # ── Shared state ──────────────────────────────────────────────────
 polar_manager   = PolarManager()
@@ -238,6 +238,12 @@ async def list_sim_scenarios():
             for s in ALL_SCENARIOS.values()
         ]
     }
+
+
+@app.post("/sim/start/race")
+async def start_race():
+    sim_runner.start_race()
+    return {"status": "started", "scenario": "race_to_mark"}
 
 
 @app.post("/sim/start/{scenario_name}")

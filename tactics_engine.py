@@ -266,15 +266,16 @@ class TacticsEngine:
         on_port = ang_diff(bearing_to_mark, port_heading) <= LAYLINE_TOLERANCE_DEG
         on_ll   = on_stbd or on_port
 
-        # Overstanding: mark has drifted to the "wrong" side of the layline
+        # Overstanding: mark has rotated PAST the layline heading (wrapped into 270-360° zone)
         if on_starboard:
-            # On stbd tack, mark should be to port of stbd_heading
-            # If it's to starboard → overstanding
+            # On stbd tack, stbd_heading points at the mark when exactly on layline.
+            # If the boat has sailed past, bearing_to_mark rotates clockwise past stbd_heading
+            # so delta wraps into (270, 360).
             delta = (bearing_to_mark - stbd_heading + 360) % 360
-            over  = 0 < delta < 90
+            over  = delta > 270
         else:
             delta = (port_heading - bearing_to_mark + 360) % 360
-            over  = 0 < delta < 90
+            over  = delta > 270
 
         return on_ll, over
 

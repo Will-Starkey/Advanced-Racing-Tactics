@@ -310,29 +310,36 @@
             bottom: 22px;
             right: 14px;
             z-index: 100;
-            background: rgba(28, 30, 36, 0.90);
-            border: 1px solid rgba(255,255,255,0.09);
+            background: rgba(18, 22, 32, 0.93);
+            border: 1px solid rgba(80, 150, 255, 0.22);
             border-radius: 12px;
-            padding: 11px 16px;
-            max-width: 300px;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            padding: 12px 16px;
+            max-width: 340px;
+            min-width: 200px;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             display: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
 
         .advice-label {
-            color: rgba(255,255,255,0.38);
+            color: rgba(100, 160, 255, 0.7);
             font-size: 10px;
             font-weight: 700;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
         }
 
         .advice-text {
-            color: rgba(255,255,255,0.88);
+            color: rgba(255,255,255,0.92);
             font-size: 14px;
-            line-height: 1.45;
+            line-height: 1.5;
+        }
+
+        .advice-text strong {
+            color: #ffffff;
+            font-weight: 700;
         }
 
         /* ── Status dot ─────────────────────────────────────── */
@@ -379,7 +386,7 @@
         .btn-settings {
             position: absolute;
             bottom: 22px;
-            right: 18px;
+            left: 14px;           /* moved to bottom-left, clear of advice */
             z-index: 100;
             background: rgba(28, 30, 36, 0.90);
             color: rgba(255,255,255,0.7);
@@ -456,8 +463,9 @@
     </div>
 </div>
 
-<!-- Wind Direction Card -->
+<!-- Wind Angle Card (relative to bow) -->
 <div class="wind-card">
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(80,80,80,0.7);text-transform:uppercase;margin-bottom:2px;">Wind</div>
     <div class="wind-arrow-wrap" id="wind-arrow-wrap">
         <svg width="22" height="26" viewBox="0 0 22 26">
             <polygon points="11,0 22,26 11,20 0,26" fill="#c62828"/>
@@ -538,6 +546,7 @@ let settingMark = null;  // 'upwind' | 'downwind' | null
 let tackBaseline    = twd;
 let lastOnStarboard = null;
 let isLive      = false;
+let mapCentered = false;  // have we auto-centered on live data yet?
 
 // ── BOAT ICON ────────────────────────────────────────────────────
 function boatIcon(hdg) {
@@ -626,13 +635,14 @@ function destPoint(lat, lon, bearingDeg, distKm) {
 }
 
 // ── DRAW LAYLINES ────────────────────────────────────────────────
-// Laylines extend FROM the mark downwind (away from mark direction)
-// Port layline:  bearing = TWD + optTWA  (boat sailing on port tack toward mark)
-// Stbd layline:  bearing = TWD - optTWA  (boat sailing on stbd tack toward mark)
+// Laylines extend DOWNWIND from the mark, toward where approaching boats
+// come from.  A port-tack boat sails at heading (twd + optTWA), so it
+// approaches the mark from direction (twd + optTWA + 180).  Same logic
+// for starboard.  Adding 180° flips each bearing to the downwind side.
 function drawLaylines() {
     const distKm   = 7.5; // ~4 nm extension
-    const portBrng = (twd + optTWA + 360) % 360;
-    const stbdBrng = (twd - optTWA + 360) % 360;
+    const portBrng = (twd + optTWA + 180 + 360) % 360;
+    const stbdBrng = (twd - optTWA + 180 + 360) % 360;
     const portEnd  = destPoint(markLat, markLon, portBrng, distKm);
     const stbdEnd  = destPoint(markLat, markLon, stbdBrng, distKm);
     portLayline.setLatLngs([[markLat, markLon], portEnd]);
@@ -695,9 +705,21 @@ function updateShiftDisplay(currentTWD, onStarboard) {
 }
 
 // ── WIND ARROW ───────────────────────────────────────────────────
-function updateWindArrow(twdDeg) {
-    document.getElementById('wind-arrow-wrap').style.transform = `rotate(${twdDeg}deg)`;
-    document.getElementById('wind-deg').textContent = `${Math.round(twdDeg)}°`;
+// Shows True Wind Angle relative to the boat's bow.
+//   Arrow straight up  = wind dead ahead (0°)
+//   Arrow tilted right = wind on starboard side (+)
+//   Arrow tilted left  = wind on port side (−)
+function updateWindArrow(twdDeg, headingDeg) {
+    // Signed TWA: + = starboard, − = port, range −180…+180
+    const raw       = ((twdDeg - headingDeg) + 360) % 360;
+    const signedTWA = raw > 180 ? raw - 360 : raw;
+
+    document.getElementById('wind-arrow-wrap').style.transform =
+        `rotate(${signedTWA}deg)`;
+
+    const abs  = Math.abs(Math.round(signedTWA));
+    const side = signedTWA >= 0 ? 'S' : 'P';
+    document.getElementById('wind-deg').textContent = `${abs}° ${side}`;
 }
 
 // ── TTM CALCULATION ──────────────────────────────────────────────
@@ -751,31 +773,50 @@ function clearPanel() {
     document.getElementById('val-ttm').textContent = '---';
 }
 
+// Render **bold** and *em* markdown as HTML
+function renderMarkdown(text) {
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+}
+
 function updatePanel(d) {
     document.getElementById('val-tws').textContent = `${(+d.tws).toFixed(1)} Kts`;
     document.getElementById('val-twd').textContent = `${Math.round(+d.twd)}°`;
 
     const awd = +d.awd;
-    document.getElementById('val-awd').textContent = `${awd >= 0 ? '' : ''}${Math.round(awd)}°`;
+    document.getElementById('val-awd').textContent = `${Math.round(awd)}°`;
 
     document.getElementById('val-sog').textContent = `${(+d.sog).toFixed(1)} Kts`;
-    document.getElementById('val-awa').textContent = `${(+d.awa).toFixed(2)}°`;
+    document.getElementById('val-awa').textContent = `${(+d.awa).toFixed(1)}°`;
     document.getElementById('val-vmg').textContent = `${(+d.vmg).toFixed(2)} Kts`;
     document.getElementById('val-ttm').textContent = `${d.ttm} Min`;
 
-    if (d.advice) {
-        document.getElementById('advice-text').textContent = d.advice;
-        document.getElementById('advice-banner').style.display = 'block';
+    const banner = document.getElementById('advice-banner');
+    if (d.advice && d.advice.trim()) {
+        document.getElementById('advice-text').innerHTML = renderMarkdown(d.advice.trim());
+        banner.style.display = 'block';
+    } else {
+        banner.style.display = 'none';
     }
 }
 
 // ── STATUS INDICATOR ─────────────────────────────────────────────
-function setStatus(live) {
-    isLive = live;
+function setStatus(mode) {
+    // mode: 'live' | 'sim' | 'demo'
+    isLive = mode !== 'demo';
     const dot  = document.getElementById('status-dot');
     const text = document.getElementById('status-text');
-    dot.className  = live ? 'dot live' : 'dot';
-    text.textContent = live ? 'Live' : 'Demo Mode';
+    if (mode === 'live') {
+        dot.className    = 'dot live';
+        text.textContent = 'Live';
+    } else if (mode === 'sim') {
+        dot.className    = 'dot live';
+        text.textContent = 'Sim';
+    } else {
+        dot.className    = 'dot';
+        text.textContent = 'Demo Mode';
+    }
 }
 
 // ── MARK PLACEMENT ───────────────────────────────────────────────
@@ -841,6 +882,21 @@ map.on('click', (e) => {
     map.getContainer().style.cursor = '';
 });
 
+// ── MARK SYNC ────────────────────────────────────────────────────
+// Pull the server-side mark (set by sim or user) and update map
+async function syncServerMark() {
+    try {
+        const res = await fetch('/mark');
+        const d   = await res.json();
+        if (d.lat && d.lon && (d.lat !== markLat || d.lon !== markLon)) {
+            markLat = d.lat;
+            markLon = d.lon;
+            markMarker.setLatLng([markLat, markLon]);
+            drawLaylines();
+        }
+    } catch {}
+}
+
 // ── API POLLING ──────────────────────────────────────────────────
 async function fetchAndRender() {
     try {
@@ -850,32 +906,63 @@ async function fetchAndRender() {
         if (d.status) throw new Error('no instruments');
 
         // Update state from API
-        twd    = d.twd      ?? twd;
-        optTWA = d.optimal_twa ?? optTWA;
-        heading = d.heading ?? heading;
-        const sog = d.sog ?? 11;
+        twd     = d.twd         ?? twd;
+        optTWA  = d.optimal_twa ?? optTWA;
+        heading = d.heading      ?? heading;
+        const sog = d.sog ?? 6;
 
         if (d.lat && d.lon) {
             boatLat = d.lat;
             boatLon = d.lon;
             boatMarker.setLatLng([boatLat, boatLon]);
+
+            // Derive mark position directly from server data so it's always
+            // correct — even before syncServerMark() has had a chance to run.
+            if (d.bearing_to_mark != null && d.dist_to_mark_nm) {
+                const mPos = destPoint(boatLat, boatLon,
+                                       d.bearing_to_mark,
+                                       d.dist_to_mark_nm * 1.852);
+                markLat = mPos[0];
+                markLon = mPos[1];
+                markMarker.setLatLng([markLat, markLon]);
+                drawLaylines();
+            }
+
+            // First live fix — zoom to show boat + mark together
+            if (!mapCentered) {
+                mapCentered = true;
+                const bounds = L.latLngBounds(
+                    [boatLat, boatLon],
+                    [markLat, markLon]
+                ).pad(0.4);
+                map.fitBounds(bounds, { animate: true, duration: 0.8 });
+            } else {
+                // Keep boat in view — pan smoothly if it drifts near the edge
+                const mapBounds = map.getBounds().pad(-0.15);
+                if (!mapBounds.contains([boatLat, boatLon])) {
+                    map.panTo([boatLat, boatLon], { animate: true, duration: 0.4 });
+                }
+            }
         }
 
+        // Detect whether this is sim data (position changes but no real instruments)
+        const isSim = d.lat && d.lon && d.bsp > 0;
         const onStarboard = detectTackAndUpdateBaseline(heading, twd);
         const ttm = d.ttm ?? calcTTM(boatLat, boatLon, sog, heading, twd, optTWA);
 
         updatePanel({ ...d, ttm });
-        updateWindArrow(twd);
+        updateWindArrow(twd, heading);
         updateShiftDisplay(twd, onStarboard);
         boatMarker.setIcon(boatIcon(heading));
         drawLaylines();
         drawHeadingLine(sog);
-        setStatus(true);
+        setStatus(isSim ? 'sim' : 'live');
 
     } catch {
+        mapCentered = false;
         clearPanel();
         runDemo();
-        setStatus(false);
+        setStatus('demo');
     }
 }
 
@@ -906,7 +993,7 @@ function runDemo() {
         advice: '',
     });
 
-    updateWindArrow(mockTWD);
+    updateWindArrow(mockTWD, mockHdg);
     updateShiftDisplay(mockTWD, onStarboard);
     boatMarker.setIcon(boatIcon(mockHdg));
     drawLaylines();
@@ -916,9 +1003,13 @@ function runDemo() {
 // ── INIT ─────────────────────────────────────────────────────────
 map.setView([boatLat, boatLon], 12);
 drawLaylines();
-drawHeadingLine(11);
-updateWindArrow(twd);
+drawHeadingLine(6);
+updateWindArrow(twd, heading);
 updateShiftDisplay(twd, true);
+
+// Sync server-side mark position on load and every 3s
+syncServerMark();
+setInterval(syncServerMark, 3000);
 
 fetchAndRender();
 setInterval(fetchAndRender, 500);

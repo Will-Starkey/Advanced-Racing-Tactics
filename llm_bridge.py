@@ -7,10 +7,19 @@ Uses prompt caching on the system prompt to minimise cost and latency.
 import os
 
 import anthropic
+from dotenv import load_dotenv
 
 from tactics_engine import TacticalState
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+load_dotenv(override=True)
+
+_client: anthropic.Anthropic | None = None
+
+def _get_client() -> anthropic.Anthropic:
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    return _client
 
 SYSTEM_PROMPT = """You are an expert sailing tactician embedded aboard a racing yacht.
 You receive real-time instrument data and pre-computed tactical analysis.
@@ -42,7 +51,7 @@ def get_tactical_advice(state: TacticalState) -> str:
     try:
         context = _build_context(state)
 
-        response = client.messages.create(
+        response = _get_client().messages.create(
             model="claude-opus-4-5",
             max_tokens=120,
             system=[

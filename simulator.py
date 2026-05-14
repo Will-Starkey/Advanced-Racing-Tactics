@@ -12,12 +12,17 @@ Then open:
 """
 
 import asyncio
+import concurrent.futures
 import math
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
 from instruments.base import InstrumentData
+
+# Shared executor for off-thread LLM calls so they don't block the sim loop
+_llm_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="llm")
 
 # ── Shared geo constants ──────────────────────────────────────────
 BASE_LAT  = 37.8270    # San Francisco Bay starting position
@@ -217,6 +222,99 @@ ALL_SCENARIOS: dict = {s.name: s for s in [
 ]}
 
 
+# ── Race simulation helpers ───────────────────────────────────────
+
+def _advance_position(lat: float, lon: float, heading_deg: float, dist_nm: float):
+    """Return (lat, lon) after sailing dist_nm on heading_deg."""
+    return _dest_coords(lat, lon, heading_deg, dist_nm)
+
+
+class RaceSimulation:
+    """
+    Stateful callable used as a SimStep.data_fn for the race-to-mark scenario.
+
+    The autopilot reads `globals_ref.latest_state` each tick and follows the
+    engine's tack_recommendation:
+      - "tack"         → flip tack (mirror heading around the wind)
+      - "sail_to_mark" → point at bearing_to_mark
+      - anything else  → hold current heading
+
+    Wind follows a gentle mean-reverting random walk (±0.3° per tick,
+    restoring toward origin at 5% per tick).
+    """
+
+    TACK_COOLDOWN_S   = 6.0    # wall-clock seconds between tacks (= 15 s at 2.5× speed)
+    ARRIVAL_NM        = 0.05   # stop when within 0.05 nm of mark
+    BSP               = 6.5    # boat speed knots (fixed for now)
+    TICK_S            = 0.5    # simulated seconds of sailing per tick
+
+    def __init__(self, globals_ref, mark_lat: float, mark_lon: float,
+                 tws: float, twd: float,
+                 boat_lat: float = BASE_LAT, boat_lon: float = BASE_LON):
+        self._g        = globals_ref
+        self.mark_lat  = mark_lat
+        self.mark_lon  = mark_lon
+        self.tws       = tws
+        self.twd_orig  = twd        # mean-reversion target
+        self.twd       = twd        # current true wind direction
+
+        # Boat starts at the given position on starboard tack.
+        # Starboard tack: twa = twd - heading > 0  →  heading = twd - 42°
+        self.heading   = (twd - 42.0 + 360.0) % 360.0
+        self.on_stbd   = True
+        self.lat       = boat_lat
+        self.lon       = boat_lon
+
+        self.last_tack_time: float = -999.0    # monotonic
+        self.arrived   = False
+
+    # ------------------------------------------------------------------ #
+    def __call__(self, step_idx: int, elapsed: float) -> InstrumentData:
+        """Called every 0.5s tick by ScenarioRunner._run()."""
+        now = time.monotonic()
+
+        # 1. Advance wind (mean-reverting random walk, ±0.3°/tick, 5% restore)
+        delta      = random.gauss(0, 0.3)
+        restore    = 0.05 * ((self.twd_orig - self.twd + 180) % 360 - 180)
+        self.twd   = (self.twd + delta + restore) % 360.0
+
+        # 2. Read latest engine state for autopilot decisions
+        state = self._g.latest_state
+        if state is not None and (now - self.last_tack_time) > self.TACK_COOLDOWN_S:
+            rec = state.tack_recommendation
+
+            if rec == "tack":
+                # Mirror heading through the wind: new_heading = twd * 2 − old_heading (mod 360)
+                self.heading     = (2 * self.twd - self.heading) % 360.0
+                self.on_stbd     = not self.on_stbd
+                self.last_tack_time = now
+
+            elif rec == "sail_to_mark" and state.bearing_to_mark is not None:
+                self.heading = state.bearing_to_mark
+
+        # 3. Advance position
+        dist_per_tick = self.BSP * (self.TICK_S / 3600.0)   # nm per tick
+        self.lat, self.lon = _advance_position(
+            self.lat, self.lon, self.heading, dist_per_tick
+        )
+
+        # 4. Check arrival (flag read by ScenarioRunner)
+        if state is not None and state.dist_to_mark_nm is not None:
+            if state.dist_to_mark_nm < self.ARRIVAL_NM:
+                self.arrived = True
+
+        # 5. Build InstrumentData
+        # awa = twd - heading (positive = starboard, consistent with other scenarios)
+        raw = (self.twd - self.heading + 360.0) % 360.0
+        awa = raw - 360.0 if raw > 180.0 else raw
+        return InstrumentData(
+            twd=self.twd, tws=self.tws, heading=self.heading,
+            bsp=self.BSP, sog=self.BSP,
+            awa=awa, aws=self.tws,
+            lat=self.lat, lon=self.lon,
+        )
+
+
 # ── Runner ────────────────────────────────────────────────────────
 
 class ScenarioRunner:
@@ -243,26 +341,99 @@ class ScenarioRunner:
         self._sim_state._task = task
         return task
 
+    def start_race(self) -> asyncio.Task:
+        """
+        Start a live race simulation with random wind.
+        TWD is chosen randomly 0–360°; TWS in range 12–17 kts.
+        Mark is placed ~0.6 nm directly upwind of the starting position.
+        """
+        self.stop()
+        tws = random.uniform(12.0, 17.0)
+        # Northerly wind (315°–45°) so the mark always appears above the
+        # starting position on a north-up chart — visually intuitive.
+        twd = random.uniform(315.0, 405.0) % 360.0
+
+        # Mark is exactly 0.6 nm upwind of BASE; boat starts exactly at BASE.
+        mark_lat, mark_lon = _dest_coords(BASE_LAT, BASE_LON, twd, 0.60)
+        race = RaceSimulation(
+            self._g, mark_lat, mark_lon, tws, twd,
+            boat_lat=BASE_LAT, boat_lon=BASE_LON,
+        )
+
+        # Max 30 min of simulated time; at 2.5× wall-clock that's ~12 min real
+        MAX_RACE_S = 1800.0
+        step = SimStep(
+            duration_seconds=MAX_RACE_S,
+            data_fn=race,
+            label=f"racing upwind  TWD={twd:.0f}°  TWS={tws:.1f}kt",
+        )
+        scenario = SimScenario(
+            name="race_to_mark",
+            description=(
+                f"Autonomous race to upwind mark. "
+                f"TWD {twd:.0f}°, TWS {tws:.1f} kts."
+            ),
+            steps=[step],
+        )
+
+        # tick_s=0.2 → 5 ticks/s wall-clock × 0.5 s simulated/tick = 2.5× speed
+        task = asyncio.create_task(self._run(
+            scenario, race_sim=race,
+            mark_lat=mark_lat, mark_lon=mark_lon,
+            tick_s=0.2,
+        ))
+        self._sim_state._task = task
+        return task
+
     def stop(self):
         if self._sim_state._task and not self._sim_state._task.done():
             self._sim_state._task.cancel()
         self._sim_state.running = False
 
-    async def _run(self, scenario: SimScenario):
+    async def _run(self, scenario: SimScenario, *,
+                   race_sim: Optional[RaceSimulation] = None,
+                   mark_lat: Optional[float] = None,
+                   mark_lon: Optional[float] = None,
+                   tick_s: float = 0.5):
         self._sim_state.running       = True
         self._sim_state.scenario_name = scenario.name
 
         # Reset engine (clears wind history, shift state, baselines)
         self._engine.__init__()
-        self._engine.set_mark(MARK_LAT, MARK_LON)
+
+        # Set mark — race uses dynamic mark, scenarios use fixed mark
+        m_lat = mark_lat if mark_lat is not None else MARK_LAT
+        m_lon = mark_lon if mark_lon is not None else MARK_LON
+        self._engine.set_mark(m_lat, m_lon)
 
         # Wire in uploaded polar if one is active
         import main as _main
         if _main.polar_manager.active:
             self._engine.set_polar(_main.polar_manager.active)
 
-        # Force LLM to fire on the very first tick
+        # Reset live-mode LLM cooldown so next real update also fires promptly
         self._g.advice_cooldown = 0
+
+        # LLM timing: fire immediately on start, then no more often than every
+        # LLM_MIN_INTERVAL_S wall-clock seconds (avoids blocking at 5 Hz).
+        LLM_MIN_INTERVAL_S = 8.0
+        last_llm_wall: float = -999.0
+        llm_in_flight: bool  = False
+
+        async def _fire_llm(state) -> None:
+            """Call the LLM in a thread so it doesn't block the sim loop."""
+            nonlocal llm_in_flight, last_llm_wall
+            if llm_in_flight:
+                return
+            llm_in_flight  = True
+            last_llm_wall  = time.monotonic()
+            try:
+                from llm_bridge import get_tactical_advice
+                loop   = asyncio.get_event_loop()
+                advice = await loop.run_in_executor(_llm_executor, get_tactical_advice, state)
+                self._g.latest_advice = advice
+            finally:
+                llm_in_flight = False
 
         try:
             for step_idx, step in enumerate(scenario.steps):
@@ -280,19 +451,23 @@ class ScenarioRunner:
                     self._g.latest_inst  = inst
                     self._g.latest_state = self._engine.update(inst)
 
-                    # LLM cooldown — same logic as on_instrument_update
-                    self._g.advice_cooldown -= 1
-                    significant = abs(self._g.latest_state.shift_degrees) > 5
-                    if significant or self._g.advice_cooldown <= 0:
-                        from llm_bridge import get_tactical_advice
-                        self._g.latest_advice   = get_tactical_advice(self._g.latest_state)
-                        self._g.advice_cooldown = 30
+                    # LLM — fire async if enough wall-clock time has passed
+                    now_wall = time.monotonic()
+                    if (now_wall - last_llm_wall) >= LLM_MIN_INTERVAL_S:
+                        asyncio.create_task(_fire_llm(self._g.latest_state))
 
                     # Update elapsed for status endpoint
                     step_offset = sum(s.duration_seconds for s in scenario.steps[:step_idx])
                     self._sim_state.elapsed_seconds = step_offset + elapsed
 
-                    await asyncio.sleep(0.5)
+                    # Race arrival check
+                    if race_sim is not None and race_sim.arrived:
+                        self._sim_state.current_step_label = (
+                            f"✓ Mark reached in {self._sim_state.elapsed_seconds:.0f}s!"
+                        )
+                        return
+
+                    await asyncio.sleep(tick_s)
 
         except asyncio.CancelledError:
             pass
