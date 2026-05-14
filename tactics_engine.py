@@ -266,16 +266,12 @@ class TacticsEngine:
         on_port = ang_diff(bearing_to_mark, port_heading) <= LAYLINE_TOLERANCE_DEG
         on_ll   = on_stbd or on_port
 
-        # Overstanding: mark has rotated PAST the layline heading (wrapped into 270-360° zone)
-        if on_starboard:
-            # On stbd tack, stbd_heading points at the mark when exactly on layline.
-            # If the boat has sailed past, bearing_to_mark rotates clockwise past stbd_heading
-            # so delta wraps into (270, 360).
-            delta = (bearing_to_mark - stbd_heading + 360) % 360
-            over  = delta > 270
-        else:
-            delta = (port_heading - bearing_to_mark + 360) % 360
-            over  = delta > 270
+        # Overstanding: bearing_to_mark has left the upwind cone [stbd_heading → twd → port_heading].
+        # The cone spans opt_twa*2 degrees clockwise from stbd_heading to port_heading.
+        # If bearing is outside (beyond) the cone on either side, the boat is overstanding.
+        cone_size = (port_heading - stbd_heading + 360) % 360   # always ~2*opt_twa
+        d         = (bearing_to_mark - stbd_heading + 360) % 360
+        over      = d > cone_size + LAYLINE_TOLERANCE_DEG
 
         return on_ll, over
 
@@ -324,6 +320,22 @@ class TacticsEngine:
 
         shift_state = state.shift_state
         shift_deg   = state.shift_degrees
+
+        # Pure VMG geometry: if the other tack is significantly faster to the mark,
+        # tack regardless of wind shift.  This catches "past the other layline" and
+        # cases where one tack has a much better angle to the mark.
+        # Threshold is intentionally high (0.75 kt net) to suppress oscillating-wind chatter.
+        VMG_TACK_THRESHOLD = 0.75
+        if (
+            state.vmg_gain_from_tack > VMG_TACK_THRESHOLD
+            and not state.on_layline
+            and (state.dist_to_mark_nm or 1.0) > 0.12  # don't tack within ~730 ft of mark
+        ):
+            return (
+                "tack",
+                f"other tack is {state.vmg_gain_from_tack:+.2f} kts VMG faster toward mark "
+                f"— geometry demands a tack (no wind shift needed)",
+            )
 
         # Transient or no shift — hold
         if shift_state in ("none", "transient"):
